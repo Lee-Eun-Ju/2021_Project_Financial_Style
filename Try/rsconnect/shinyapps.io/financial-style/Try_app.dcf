@@ -1,0 +1,13 @@
+name: Try_app
+title: Try_app
+username:
+account: financial-style
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4207644
+bundleId: 4658836
+url: https://financial-style.shinyapps.io/Try_app/
+when: 1622434962.03183
+lastSyncTime: 1622434962.03183
+asMultiple: FALSE
+asStatic: FALSE

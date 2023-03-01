@@ -1,0 +1,115 @@
+---
+title: "Time series_EDA"
+author: "LEE EUN JU"
+date: '2021 5 26 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+```
+
+1. Data
+```{r}
+credit = read.csv("credit_card_data.csv", fileEncoding="UTF-8")
+credit = credit %>%
+    filter(!(year==2016 & month==1 & ages=="10대")) %>% 
+    filter( str_sub(pop_cd,1,1) == "L" ) %>% 
+    dplyr::select( -sex)
+
+credit$date = str_c(credit$year, "-", credit$month)
+credit$date = ym(credit$date)
+```
+
+2. 신용카드 소비액
+```{r}
+credit %>% 
+  group_by(date, ages) %>% 
+  mutate(Card_spend = mean(monthly_card_spend)) %>% 
+  ggplot(aes(x=date, y=Card_spend,
+             colour=fct_reorder2(ages,date,Card_spend))) +
+  geom_line() + geom_point() + labs(colour="ages")
+  
+credit %>% 
+  group_by(date, city) %>% 
+  mutate(Card_spend = mean(monthly_card_spend)) %>% 
+  ggplot(aes(x=date, y=Card_spend,
+             colour=fct_reorder2(city,date,Card_spend))) +
+  geom_line() + geom_point() + labs(colour="city")
+  
+```
+
+3. 신용점수
+```{r}
+credit %>% 
+  group_by(date, ages) %>% 
+  mutate(Credit_score = mean(avg_score)) %>% 
+  ggplot(aes(x=date, y=Credit_score,
+             colour=fct_reorder2(ages,date,Credit_score))) +
+  geom_line() + geom_point() + labs(colour="ages")
+
+credit %>% 
+  filter(date != ym("2016-1")) %>% 
+  group_by(date, city) %>% 
+  mutate(Credit_score = mean(avg_score)) %>% 
+  ggplot(aes(x=date, y=Credit_score,
+             colour=fct_reorder2(city,date,Credit_score))) +
+  geom_line() + geom_point() + labs(colour="city")
+```
+
+4. 카드 사용개수
+```{r}
+credit %>% 
+  filter(date != ym("2016-1")) %>% 
+  group_by(date, ages) %>% 
+  mutate(Using_card = mean(num_usecard)) %>% 
+  ggplot(aes(x=date, y=Using_card,
+             colour=fct_reorder2(ages,date,Using_card))) +
+  geom_line() + geom_point() + labs(colour="ages")
+
+
+credit %>% 
+  filter(date != ym("2016-1")) %>% 
+  group_by(date, city) %>% 
+  mutate(Using_card = mean(num_usecard)) %>% 
+  ggplot(aes(x=date, y=Using_card,
+             colour=fct_reorder2(city,date,Using_card))) +
+  geom_line() + geom_point() + labs(colour="ages")
+
+```
+
+
+5. 월별 총 대출금액
+```{r}
+credit %>% 
+  filter(date != ym("2016-1")) %>% 
+  group_by(date, ages) %>% 
+  mutate(Loan = mean(monthly_loan)) %>% 
+  ggplot(aes(x=date, y=Loan,
+             colour=fct_reorder2(ages,date,Loan))) +
+  geom_line() + geom_point() + labs(colour="ages")
+
+
+credit %>% 
+  group_by(date, city) %>% 
+  mutate(Loan = mean(monthly_loan)) %>% 
+  ggplot(aes(x=date, y=Loan,
+             colour=fct_reorder2(city,date,Loan))) +
+  geom_line() + geom_point() + labs(colour="city")
+
+```
+
+
+6. 대출금액
+```{r}
+credit %>% 
+  pivot_longer(monthly_loan:monthly_sbk_loan,
+               names_to="loan", values_to="value") %>% 
+  group_by(date,loan) %>% 
+  mutate(loan_mean = mean(value)) %>% 
+  ggplot(aes(x=date, y=loan_mean, colour=loan)) +
+  geom_line() + geom_point()
+```
+

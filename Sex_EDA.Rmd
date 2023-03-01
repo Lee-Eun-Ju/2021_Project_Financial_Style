@@ -1,0 +1,157 @@
+---
+title: "Sex_EDA"
+author: "LEE EUN JU"
+date: '2021 5 19 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## 성별로 금융스타일
+## 시계열별로 금융스타일
+
+## Data import
+
+```{r}
+credit = read.csv("credit_card_data.csv", fileEncoding="UTF-8")
+jeju = read.csv("jeju_financial_life_data.csv")
+
+credit = credit[-1,] #첫번째 데이터 오류 존재
+str(credit)
+
+sex_credit = credit %>%
+  filter( str_sub(pop_cd,1,1) == "Y" ) %>% 
+  dplyr::select( -city)
+sex_credit = sex_credit[,-1]
+
+sex_credit$sex = factor(sex_credit$sex, levels=c("여자","남자"))
+```
+
+
+#### 성별 credit
+2. avg_score(신용 점수), avg_rat(신용등급)
+
+=> 60대까지 여성의 신용점수가 높지만 70대부터는 남성의 신용점수가 좋다
+=> 성별에 따른 인구수의 차이로 인한 것은 아닌 것으로 보인다.
+```{r}
+unique(sex_credit$avg_rat) #2등급, 3등급, 4등급 -> 정보의 손실이 심하다
+sex_credit$avg_score %>% is.na %>% which #score NA도 없으므로 신용등급 삭제
+
+sex_credit %>% 
+  ggplot(aes(x=sex, y=avg_score)) +
+  geom_boxplot(aes(color=sex))
+
+sex_credit %>% 
+  ggplot(aes(x=ages, y=avg_score)) +
+  geom_boxplot(aes(color=sex), position="identity") 
+
+sex_credit %>% 
+  ggplot(aes(x=ages, y=population)) +
+  geom_bar(aes(fill=sex), stat="identity", position="dodge")
+```
+
+
+3. num_usecard(카드사용개수),num_opencard(카드개설개수) 
+```{r}
+sex_credit %>% 
+  ggplot(aes(x=ages, y=num_opencard)) +
+  geom_boxplot(aes(color=sex), position="identity") 
+
+sex_credit %>% 
+  ggplot(aes(x=ages, y=num_usecard)) +
+  geom_boxplot(aes(color=sex), position="identity")
+```
+
+
+```{r}
+sex_credit %>% 
+  mutate(card_using_rate = num_usecard/num_opencard) %>% 
+  ggplot(aes(x=ages, y=card_using_rate)) +
+  geom_boxplot(aes(color=sex), position="identity")
+```
+
+
+
+4. 월카드 소비액(monthly_card_spend)
+
+=> 월카드 소비액은 30대~60대의 경우 남성이 더욱 많이 쓴다.
+=> 하지만 20대의 경우 여성이 더 많은 소비를 함을 보인다.
+```{r}
+sex_credit %>% 
+  mutate(reorder_ages = factor(sex_credit$ages, levels=levels(reorder(sex_credit$ages, sex_credit$monthly_card_spend, median, na.rim=TRUE)))) %>% 
+  ggplot(aes(x=reorder_ages, y=monthly_card_spend)) + 
+  geom_boxplot(aes(color=sex), position="identity")
+
+```
+
+
+
+5. 대출금액과 각 대출종류에 대한 비율
+
+* monthly_lc: 대출약정금액으로 대출총액과의 차이는 아직 대출금을 받지 않은 경우
+-> 이변수는 주관적으로 보았을 때 의미가 없다고 생각
+
+
+* 월별 loan, bk_loan순으로 많으며 보통 남성이 더 많은 대출을 가지고 있다.
+```{r}
+sex_credit %>% 
+  group_by(sex) %>% 
+  summarise( monthly_loan = mean(monthly_loan),
+             monthly_bk_loan = mean(monthly_bk_loan),
+             monthly_cd_loan = mean(monthly_cd_loan),
+             monthly_installments_loan = mean(monthly_installments_loan),
+             monthly_insurance_loan = mean(monthly_insurance_loan),
+             monthly_sbk_loan = mean(monthly_sbk_loan)) %>% 
+   pivot_longer("monthly_loan":"monthly_sbk_loan", 
+               values_to = "value", names_to = "variable") %>% 
+  mutate(variable = factor(variable, levels=levels(reorder(variable, value)))) %>% 
+  ggplot() +
+  geom_bar(aes(x=sex, y=value, fill=variable), position="dodge", stat="identity")
+```
+
+* 이를 제외하고는 
+```{r}
+sex_credit %>% 
+  group_by(sex) %>% 
+  summarise( monthly_cd_loan = mean(monthly_cd_loan),
+             monthly_installments_loan = mean(monthly_installments_loan),
+             monthly_insurance_loan = mean(monthly_insurance_loan),
+             monthly_sbk_loan = mean(monthly_sbk_loan)) %>% 
+   pivot_longer("monthly_cd_loan":"monthly_sbk_loan", 
+               values_to = "value", names_to = "variable") %>% 
+  ggplot() +
+  geom_bar(aes(x=sex, y=value, fill=variable), position="dodge", stat="identity")
+```
+
+
+6. 남은 잔액
+
+loan_commitment : 한도 대출 금액(마이너스 통장)
+inst_rep_loanb : 분할 상환 대출 금액
+ls_rep_loanb : 일시 상환 대출 금액
+credit_loan : 카드 대출 금액
+mortgage_loan : 담보 대출 금액
+
+```{r}
+sex_credit %>% 
+  mutate(all_loanb = inst_rep_loanb + ls_rep_loanb) %>%  #남은 총 대출잔액
+  group_by(sex) %>% 
+  summarise(all_loanb_mean = mean(all_loanb),
+            loan_commitment_mean = mean(loan_commitment),
+            inst_rep_loanb_mean = mean(inst_rep_loanb), 
+            ls_rep_loanb_mean = mean(ls_rep_loanb),
+            credit_loan_mean = mean(credit_loan),
+            mortgage_loan_mean = mean(mortgage_loan)
+            ) %>% 
+  pivot_longer("loan_commitment_mean":"mortgage_loan_mean", 
+               values_to = "value", names_to = "variable") %>% 
+  ggplot() +
+  geom_bar(aes(x=sex, y=value, fill=variable), position="dodge", stat="identity")
+
+
+```
+
+

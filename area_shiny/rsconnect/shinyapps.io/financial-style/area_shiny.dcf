@@ -1,0 +1,13 @@
+name: area_shiny
+title: area_shiny
+username:
+account: financial-style
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4171611
+bundleId: 4629983
+url: https://financial-style.shinyapps.io/area_shiny/
+when: 1621773793.6567
+lastSyncTime: 1621773793.6567
+asMultiple: FALSE
+asStatic: FALSE

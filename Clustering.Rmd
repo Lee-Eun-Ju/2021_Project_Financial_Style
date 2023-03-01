@@ -1,0 +1,421 @@
+---
+title: "Clustering"
+author: "LEE EUN JU"
+date: '2021 5 26 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Data
+```{r}
+credit = read.csv("credit_card_data.csv", fileEncoding="UTF-8")
+jeju = read.csv("jeju_financial_life_data.csv")
+
+credit = credit %>%
+  filter( str_sub(pop_cd,1,1) == "L" ) %>%  
+  filter(!(year==2016 & month==1 & ages=="10대")) %>% 
+  dplyr::select(-pop_cd, -year, -month, -avg_rat, - population, -sex)   
+credit$group = str_c(credit$city,"-",credit$ages)
+
+credit_group = credit %>% 
+  group_by(group) %>% 
+  summarise(avg_score=mean(avg_score),
+            num_opencard=mean(num_opencard),
+            num_usecard=mean(num_usecard),
+            monthly_card_spend=mean(monthly_card_spend),
+            monthly_lc=mean(monthly_lc),
+            monthly_loan=mean(monthly_loan),
+            monthly_bk_loan=mean(monthly_bk_loan),
+            monthly_cd_loan=mean(monthly_cd_loan),
+            monthly_installments_loan=mean(monthly_installments_loan),
+            monthly_insurance_loan=mean(monthly_insurance_loan),
+            monthly_sbk_loan=mean(monthly_sbk_loan),
+            loan_commitment=mean(loan_commitment),
+            inst_rep_loanb=mean(inst_rep_loanb),
+            ls_rep_loanb=mean(ls_rep_loanb),
+            credit_loan=mean(credit_loan),
+            mortgage_loan=mean(mortgage_loan),
+            credit_card_payment=mean(credit_card_payment),
+            credit_card_installments_payment=mean(credit_card_installments_payment)      
+            )
+
+credit_group = as.data.frame(credit_group )
+rownames(credit_group) = credit_group$group
+credit_group = credit_group[,-1]
+```
+
+
+
+## PCA
+
+1. 정규성 - 따르지않는다.
+```{r}
+library(MVN)
+mvn(credit_group, mvnTest="mardia", multivariatePlot = "qq")
+
+```
+
+2. PCA
+* 주성분 - 2개 뽑아진다.
+```{r}
+R=round(cor(credit_group),3)
+eigen=eigen(R)
+round(eigen$values,2)
+V=round(eigen$vectors,2)
+
+gof=eigen$values/sum(eigen$values)*100 
+round(gof, 2)
+plot(eigen$values, type="b", main="Scree Graph", 
+     xlab="Component Number", ylab="Eigenvalue")
+V2=V[,1:2]
+rownames(V2) = colnames(credit_group)
+colnames(V2) = c("PC1","PC2")
+V2
+```
+
+* PCs scores
+```{r}
+Z=scale(credit_group, center=TRUE, scale=TRUE)
+PC=Z%*%V2
+round(PC, 3)
+
+plot(PC[,1], PC[,2], main="Plot of PCs Scores", xlab="1st PC", ylab="2nd PC",
+     xlim=c(-6.5,6.5), ylim=c(-4,4))
+text(PC[,1], PC[,2], labels=rownames(credit_group), cex=0.6, col="blue", pos=1)
+abline(v=0, h=0)
+
+```
+
+* Biplot
+```{r}
+n= nrow(credit_group)
+joinnames= c(rownames(credit_group),colnames(credit_group))
+Z=scale(credit_group, center=TRUE, scale=TRUE); svd.Z <- svd(Z) 
+U <- svd.Z$u
+V <- svd.Z$v 
+D <- diag(svd.Z$d)
+G <- (sqrt(n-1)*U)[,1:2]
+H <- (sqrt(1/(n-1))*V%*%D)[,1:2] 
+C <- rbind(G, H)
+rownames(G)<-rownames(credit_group)
+rownames(H)<-colnames(credit_group)
+rownames(C)<-joinnames
+
+eig <- (svd.Z$d)^2 
+per <- eig/sum(eig)*100;  per
+gof <- sum(per[1:2])
+
+lim<-range(pretty(G))
+biplot(G[,1:2],H[,1:2], xlab="1st PC", ylab="2nd PC", main="biplot function",
+       xlim=lim,ylim=lim,cex=0.6,pch=16)
+abline(v=0,h=0)
+biplot(G[,1:2],H[,1:2], xlab="1st PC", ylab="2nd PC", main="biplot function",
+       xlim=c(-4,4),ylim=c(-2.5,2),cex=0.6,pch=16)
+abline(v=0,h=0)
+```
+
+
+3. PCFA
+-> 공통성이 1에 가깝고 공통분산이 0에 가깝게 되도록 원래 2개였으나 3개로 늘린다.
+```{r}
+library(psych)
+p=dim(credit_group)[2]
+Z=scale(credit_group, center=TRUE, scale=TRUE)
+pcfa<-principal(Z, nfactors=3, rotate="varimax")
+
+round(pcfa$values, 2)
+gof=pcfa$values/p*100; round(gof, 3)
+plot(pcfa$values, type="b", main="Scree Graph", 
+     xlab="Component Number", ylab="Eigenvalue")
+
+L=pcfa$loading[,1:3]; round(L, 3)
+round(diag(L%*%t(L)), 3) 
+Psi=pcfa$uniquenesses
+round(Psi,2)
+R=cor(credit_group)
+Rm = R-(L%*%t(L) + diag(Psi))
+round(Rm, 2)
+```
+
+* factor loadings
+```{r}
+lim<-range(pretty(L))
+plot(L[,1], L[,2],main="PC Factor Loadings : f1 and f2",  
+     xlab="f1", ylab="f2", xlim=lim, ylim=lim)
+text(L[,1], L[,2], labels=rownames(L), cex=0.6, col="blue", pos=1)
+abline(v=0, h=0)
+arrows(0,0, L[,1], L[, 2], col=2, code=2, length=0.1)
+```
+
+* factor scores
+```{r}
+fpc=pcfa$scores
+round(fpc, 3)
+plot(fpc[,1], fpc[,2],main="Factor Scores : pc f1 and f2", 
+     xlim=c(-3,2), ylim=c(-2,4))
+text(fpc[,1], fpc[,2], labels=rownames(fpc), cex=0.6, col="blue", pos=1)
+abline(v=0, h=0)
+```
+
+* Biplot
+```{r}
+svd.Z=svd(Z)
+U=svd.Z$u
+V=svd.Z$v 
+D <- diag(svd.Z$d)
+F <- (sqrt(n-1)*U)[,1:4] 
+L <- (sqrt(1/(n-1))*V%*%D)[,1:4]
+C <- rbind(F, L)
+rownames(F)<-rownames(credit_group);
+rownames(L)<-colnames(credit_group)
+
+eig <- (svd.Z$d)^2 
+per <- eig/sum(eig)*100;  per
+gof <- sum(per[1:4])
+
+varimax<-varimax(L)
+Lt = varimax$loadings 
+T=varimax$rotmat; T
+Ft= F%*%T
+
+biplot(Ft[,c(1,2)],Lt[,c(1,2)], xlab="f1",ylab="f2", 
+       main="Varimax Rotated Biplot : f1 and f2", 
+       xlim=c(-2,4),ylim=c(-3.5,1.5),cex=0.6,pch=16)
+abline(v=0,h=0)
+
+```
+
+
+3. Clustering
+* 원래데이터
+```{r}
+
+library(NbClust)
+#계층군집분석 - Ward linkage
+Z=scale(credit_group, scale=TRUE, center=TRUE)
+ds = dist(Z, method="euclidean")
+ward = hclust(ds, method="ward.D2")
+plot(ward, hang=-1, labels=rownames(credit_group), cex=0.5)
+all<-NbClust(Z, distance="euclidean", min.nc = 2, max.nc = 10,
+             method = "ward.D2", index = "all") #3개 뽑아라
+
+
+#비계층군집분석 - K-means
+all<-NbClust(Z, distance="euclidean", min.nc = 2, max.nc = 10,
+             method = "kmeans", index = "all")
+## 군집3개
+kmeans <- kmeans(Z, 3) 
+cluster=data.frame(group=rownames(Z), cluster=kmeans$cluster)
+C1=cluster[(cluster[,2]==1),]
+C2=cluster[(cluster[,2]==2),]
+C3=cluster[(cluster[,2]==3),]
+C1;C2;C3
+aggregate(Z, by=list(kmeans$cluster), FUN=mean)
+
+## 군집5개
+kmeans <- kmeans(Z, 5) 
+cluster=data.frame(group=rownames(Z), cluster=kmeans$cluster)
+C1=cluster[(cluster[,2]==1),]
+C2=cluster[(cluster[,2]==2),]
+C3=cluster[(cluster[,2]==3),]
+C4=cluster[(cluster[,2]==4),]
+C5=cluster[(cluster[,2]==5),]
+C1;C2;C3;C4;C5
+aggregate(Z, by=list(kmeans$cluster), FUN=mean)
+
+
+```
+
+
+* 주성분인자
+```{r}
+library(NbClust)
+
+#계층군집분석 - Ward linkage
+
+Z=scale(credit_group, scale=TRUE, center=TRUE)
+pcfa<-principal(Z, nfactors=3, rotate="varimax") #4개의 인자
+fpc=pcfa$scores
+ds = dist(fpc, method="euclidean")
+ward = hclust(ds, method="ward.D2")
+plot(ward, hang=-1, labels=rownames(credit_group), cex=0.5)
+all<-NbClust(fpc, distance="euclidean", min.nc = 2, max.nc = 10,
+             method = "ward.D2", index = "all") #6개 뽑아라
+
+##비계층군집분석-kMEANS : 군집8개
+all<-NbClust(fpc, distance="euclidean", min.nc = 2, max.nc = 10,
+             method = "kmeans", index = "all")
+all[[1]]
+print(all)
+kmeans <- kmeans(fpc,8) 
+cluster=data.frame(group=rownames(fpc), cluster=kmeans$cluster)
+C1=cluster[(cluster[,2]==1),]
+C2=cluster[(cluster[,2]==2),]
+C3=cluster[(cluster[,2]==3),]
+C4=cluster[(cluster[,2]==4),]
+C5=cluster[(cluster[,2]==5),]
+C6=cluster[(cluster[,2]==6),]
+C7=cluster[(cluster[,2]==7),]
+C8=cluster[(cluster[,2]==8),]
+
+
+        C1%>% head();C2%>% head();C3%>% head();C4%>% head()
+        C5%>% head();C6%>% head();C7%>% head();C8%>% head()
+aggregate(fpc, by=list(kmeans$cluster), FUN=mean)
+
+```
+
+
+* Conclusion
+-원데이터
+```{r}
+Z = data.frame(group=rownames(Z), Z)
+data = Z %>% 
+  inner_join(cluster, by="group")
+
+```
+
+
+-주성분
+```{r }
+library("gplots")
+fpc = data.frame(group=rownames(fpc), fpc)
+data = fpc %>%
+  inner_join(cluster, by=c("group"))
+data
+
+data %>% 
+  ggplot(aes(x=data$RC1, y=data$RC2)) +
+  geom_point(aes(colour=factor(cluster)))
+
+data %>% 
+  ggplot(aes(x=data$RC1, y=data$RC3)) +
+  geom_point(aes(colour=factor(cluster)))
+
+data %>% 
+  ggplot(aes(x=data$RC2, y=data$RC3)) +
+  geom_point(aes(colour=factor(cluster)))
+
+####################################################
+credit_group2 = data.frame(group=rownames(credit_group ), credit_group )
+data = credit_group2 %>%
+  inner_join(cluster, by=c("group"))
+data_cluster = data %>% 
+  group_by(cluster) %>% 
+  summarise(avg_score=mean(avg_score),
+            num_opencard=mean(num_opencard),
+            num_usecard=mean(num_usecard),
+            monthly_card_spend=mean(monthly_card_spend),
+            monthly_lc=mean(monthly_lc),
+            monthly_loan=mean(monthly_loan),
+            monthly_bk_loan=mean(monthly_bk_loan),
+            monthly_cd_loan=mean(monthly_cd_loan),
+            monthly_installments_loan=mean(monthly_installments_loan),
+            monthly_insurance_loan=mean(monthly_insurance_loan),
+            monthly_sbk_loan=mean(monthly_sbk_loan),
+            loan_commitment=mean(loan_commitment),
+            inst_rep_loanb=mean(inst_rep_loanb),
+            ls_rep_loanb=mean(ls_rep_loanb),
+            credit_loan=mean(credit_loan),
+            mortgage_loan=mean(mortgage_loan),
+            credit_card_payment=mean(credit_card_payment),
+            credit_card_installments_payment=mean(credit_card_installments_payment)      
+            )
+
+data_cluster = as.data.frame(data_cluster )
+rownames(data_cluster) = data_cluster$cluster
+data_cluster  = data_cluster[,-1]
+Z = scale(as.matrix(data_cluster), scale=TRUE, center=TRUE)
+heatmap.2(Z, col=bluered(100),trace="none",density.info="none")
+```
+
+
+
+* Heatmap
+```{r }
+data=as.matrix(credit_group)
+data=scale(data)
+str(data)
+
+##heatmap
+install.packages("gplots")
+library("gplots")
+heatmap.2(data, col=bluered(100),trace="none",density.info="none")
+
+install.packages("pheatmap")
+library("pheatmap")
+pheatmap(data, cutree_rows=25)
+
+
+#주성분만으로 히트맵
+data=as.matrix(fpc)
+data=scale(data)
+str(data)
+heatmap.2(data, col=bluered(100),trace="none",density.info="none")
+pheatmap(data, cutree_rows=25)
+
+```
+
+
+
+###########################################################################################
+
+Group화하지 않고 보기
+```{r}
+credit = read.csv("credit_card_data.csv", fileEncoding="UTF-8")
+jeju = read.csv("jeju_financial_life_data.csv")
+
+credit = credit %>%
+  filter(!(year==2016 & month==1 & ages=="10대")) %>% 
+  select(-pop_cd, -year, -month)   
+
+credit$avg_rat = as.factor(credit$avg_rat)
+credit$city = as.factor(credit$city)
+credit$sex = as.factor(credit$sex)
+credit$ages = as.factor(credit$ages)
+
+credit_factor = credit %>% 
+  select(avg_rat, city, sex, ages)
+credit_num = credit %>% 
+  select(-avg_rat, -city, -sex, -ages)
+Z = scale(credit_num, scale=TRUE, center=TRUE)
+
+credit_k = cbind(credit_factor, credit_num)
+
+#########################Clustering
+
+library(cluster)
+kmedoids = pam(credit_k, 6, metric="euclidean")
+cluster = data.frame(rownames(credit_k), cluster=kmedoids$cluster)
+c1 = cluster[(cluster[,2]==1),]
+c2 = cluster[(cluster[,2]==2),]
+c3 = cluster[(cluster[,2]==3),]
+c4 = cluster[(cluster[,2]==4),]
+c5 = cluster[(cluster[,2]==5),]
+c6 = cluster[(cluster[,2]==6),]
+c1; c2; c3; c4; c5; c6
+
+aggregate(credit_k, by=list(kmedoids$cluster), FUN=mean)
+
+fpc = data.frame(group=rownames(fpc), fpc)
+data = fpc %>%
+  inner_join(cluster, by=c("group"))
+data
+
+
+```
+
+
+
+
+
+
+
+
+
+
+

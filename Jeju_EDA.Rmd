@@ -1,0 +1,348 @@
+---
+title: "Jeju_finantialstyle"
+author: "LEE EUN JU"
+date: '2021 5 25 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggmap)
+library(ggplot2)
+library(raster)
+library(rgeos)
+library(maptools)
+library(rgdal)
+library(lubridate)
+```
+
+### Jeju finantial style
+```{r}
+jeju = read.csv("jeju_financial_life_data.csv")
+```
+
+* 지역
+```{r}
+library(ggmap)
+library(devtools)
+googleAPIkey = "AIzaSyC8TCfzB0cvDOJv8jn0F9VqzOzE-X8jgOc"
+register_google(googleAPIkey)
+jeju_map = get_map("jeju", zoom=10, maptype="roadmap")
+```
+
+
+```{r}
+ggmap(jeju_map) +
+  geom_point(data = jeju, 
+             mapping=aes(x=x_axis, y=y_axis, color=),
+             alpha=0.05) +
+  facet_wrap(~ages, ncol=2)
+
+jeju$avg_spend= as.numeric(jeju$avg_spend)
+
+str(jeju)
+
+
+x = credit %>% 
+  mutate(ages_group = ifelse(ages=="30대"|ages=="30대"|ages=="30대", "3-50대", 
+                             ifelse(ages=="60대"|ages=="70대","6-70대", 
+                                    ifelse(ages=="80대"|ages=="90대","8-90대",
+                                           ifelse(ages=="10대", "10대","20대"))))) %>% 
+  dplyr::select(ages_group, monthly_card_spend)
+x$type = "korea"
+colnames(x) = c("ages", "monthly_card_spend", "type")
+
+y = jeju %>% 
+  dplyr::select(ages, avg_spend)
+y$avg_spend = as.integer(y$avg_spend)
+y$type = "jeju"
+colnames(y) = c("ages", "monthly_card_spend", "type")
+y=y[-9301,]
+
+y[which(y$monthly_card_spend == max(y$monthly_card_spend)),]
+
+
+xy = rbind(x,y)
+
+xy %>%  
+  ggplot() + 
+  geom_boxplot(mapping=aes(x=factor(ages), y=monthly_card_spend, colour=type) )
+
+
+
+
+```
+
+
+
+
+
+* Age -> 20대/30대/40대/50대/60대/70대/80대~
+```{r}
+jeju = jeju %>% 
+  mutate(ages= ifelse(age<=29, "20대 이하", 
+                      ifelse(age<=59, "30-50대", 
+                      ifelse(age<=79, "60-70대", "80대 이상")))) %>% 
+  dplyr::select(-zip_cd, -year_month, -age)
+
+
+ggmap(jeju_map) +
+  geom_point(data = jeju, 
+             mapping=aes(x=x_axis, y=y_axis, color=ages),
+             alpha=0.05) +
+  facet_wrap(~ages, ncol=2)
+
+#################
+ggmap(jeju_map) +
+  geom_point(data = jeju %>% group_by(x_axis,y_axis) %>% count(ages), 
+             mapping=aes(x=x_axis, y=y_axis, color=ages),
+             alpha=0.1) +
+  facet_wrap(~ages, ncol=2)
+```
+
+* Job
+```{r fig.width=15, fig.height=30}
+# 전체적인 직업
+jeju %>% 
+  pivot_longer(job_majorc:job_other,
+               names_to = "job", values_to = "prop") %>% 
+  filter(prop>0) %>% 
+  ggplot(aes(x=job))+
+  geom_bar(aes(fill=job))
+
+# 나이대별 직업
+jeju %>% 
+  pivot_longer(job_majorc:job_other,
+               names_to = "job", values_to = "prop") %>% 
+  ggplot(aes(x=ages, y=prop, color=job)) +
+  geom_boxplot()
+
+
+#################################################
+
+# 각 직업별 지도 분포
+ggmap(jeju_map) +
+  jeju %>% 
+  pivot_longer(job_majorc:job_other,
+               names_to = "job", values_to = "prop") %>% 
+  geom_point(mapping=aes(x=x_axis, y=y_axis, colour=ages, size=prop)) +
+  facet_wrap(~job, ncol=2) 
+
+ggmap(jeju_map) +
+  jeju %>% 
+  pivot_longer(job_majorc:job_other,
+               names_to = "job", values_to = "prop") %>%
+  group_by(x_axis,y_axis,ages) %>% 
+  mutate(rank=min_rank(desc(prop))) %>% 
+  filter(rank==1) %>% 
+  geom_point(mapping=aes(x=x_axis, y=y_axis, colour=job)) +
+  facet_wrap(~ages, ncol=2) 
+```
+
+```{r}
+
+  djeju %>% 
+  pivot_longer(job_majorc:job_other,
+               names_to = "job", values_to = "prop") %>% 
+  ggplot(aes(x = job, y=avg_income)) +
+  geom_boxplot()
+```
+
+
+* 평균 신용도 및 연소득
+```{r}
+ggmap(jeju_map) +
+  geom_point(data = jeju ,
+             mapping=aes(x=x_axis, y=y_axis, 
+                         colour=factor(avg_credit_rat))) 
+ggmap(jeju_map) +
+  geom_point(data = jeju ,
+             mapping=aes(x=x_axis, y=y_axis, colour=ages,
+                         size=avg_income)) +
+  facet_grid(~ages)
+
+      ggmap(jeju_map) +
+        jeju %>% 
+        mutate(income = ifelse(avg_income <=quantile(avg_income)[2], "연소득 하위 25%",
+                        ifelse(avg_income <=quantile(avg_income)[4], "연소득 중산층", "연소득 상위 25%"))) %>% 
+        geom_point(mapping=aes(x=x_axis, y=y_axis, colour=income)) +
+        facet_wrap(~ages)
+
+
+ggplot(jeju) +
+  geom_boxplot(aes(x=factor(avg_credit_rat), y=avg_income, 
+                   colour=factor(avg_credit_rat)))
+```
+
+
+* 부동산/자동차
+```{r}
+jeju %>% 
+  filter(medium_resid_rat>0, large_resid_rat>0, vehicle_own_rat>0) %>% 
+  pivot_longer(medium_resid_rat:vehicle_own_rat,
+               names_to = "asset", values_to = "prop") %>%
+  ggplot(aes(x=ages, y=prop)) +
+  geom_boxplot(aes(colour=asset))
+
+ggmap(jeju_map) +
+  jeju %>% 
+  filter(medium_resid_rat>0, large_resid_rat>0, vehicle_own_rat>0) %>% 
+  pivot_longer(medium_resid_rat:vehicle_own_rat,
+               names_to = "asset", values_to = "prop") %>% 
+  geom_point(mapping = aes(x=x_axis, y=y_axis, colour=asset, size=prop))
+
+```
+
+
+* 소비액
+```{r}
+ggmap(jeju_map) +
+  jeju %>%  
+  pivot_longer(avg_spend:avg_foreign_spend,
+               names_to = "spend", values_to = "value") %>% 
+  geom_point(mapping = aes(x=x_axis, y=y_axis, colour=spend, size=value))
+
+ggmap(jeju_map) +
+  jeju %>% 
+  mutate(spend = ifelse(avg_spend <= quantile(avg_spend)[2], "0%-25%",
+                 ifelse(avg_spend <= quantile(avg_spend)[3], "26%-50%",
+                 ifelse(avg_spend <= quantile(avg_spend)[4], "51%-75%","76%-100%")))) %>% 
+  geom_point(mapping = aes(x=x_axis, y=y_axis, colour=spend)) +
+  facet_wrap(~ages)
+  
+```
+
+
+* 대출 잔액
+```{r fig.width=15, fig.height=30}
+
+jeju_job = jeju %>% 
+  pivot_longer(job_majorc:job_other,
+               names_to = "job", values_to = "prop") %>% 
+  filter(prop>0)
+
+jeju_job %>% 
+  pivot_longer(avg_debt_credit:avg_debt_collateral,
+               names_to="debt", values_to="value") %>% 
+  ggplot(aes(x=job, y=value, fill=debt)) +
+  geom_bar(stat="identity") +
+  coord_flip()
+
+jeju_job %>% 
+  pivot_longer(avg_debt_credit:avg_debt_collateral,
+               names_to="debt", values_to="value") %>% 
+  ggplot(aes(x=job, y=value, fill=debt)) +
+  geom_boxplot()
+
+
+  
+k=  jeju %>% 
+  mutate(avg_debt = avg_debt_collateral+avg_debt_credit+avg_debt_deposit+avg_debt_mortgage) %>% 
+  pivot_longer(c(avg_debt, avg_debt_noneb),
+               names_to="debt", values_to="value") 
+k$value =as.integer(k$value)
+
+ggmap(jeju_map) +
+  geom_point(data =k, mapping = aes(x=x_axis, y=y_axis, colour=debt, size=value), alpha=0.1) 
+
+
+
+ggmap(jeju_map) +
+  geom_point(data = jeju, mapping = aes(x=x_axis, y=y_axis, size=avg_debt_noneb), alpha=0.1) 
+```
+
+```{r}
+ggmap(jeju_map) +
+  jeju %>% 
+  pivot_longer(avg_debt_credit:avg_debt_collateral,
+               names_to="debt", values_to="value") %>% 
+  geom_point(mapping = aes(x=x_axis, y=y_axis, colour=debt, size=value), alpha=0.1) +
+  facet_wrap(~debt, ncol=2)
+```
+
+
+### Clustering
+```{r}
+library(psych)
+jeju = read.csv("jeju_financial_life_data.csv")
+jeju_clust = jeju %>% 
+  mutate(medium_resid_rat = ifelse(medium_resid_rat<=0, 0, medium_resid_rat),
+         large_resid_rat = ifelse(large_resid_rat<=0, 0, large_resid_rat)) %>% 
+  dplyr::select(-zip_cd, -x_axis, -y_axis, -year_month, -age, -sex, -avg_credit_rat)
+
+```
+
+```{r}
+R=round(cor(jeju_clust),3)
+eigen=eigen(R)
+round(eigen$values,2)
+V=round(eigen$vectors,2)
+
+gof=eigen$values/sum(eigen$values)*100 
+round(gof, 2)
+plot(eigen$values, type="b", main="Scree Graph", 
+     xlab="Component Number", ylab="Eigenvalue")
+V2=V[,1:2]
+rownames(V2) = colnames(credit_group)
+colnames(V2) = c("PC1","PC2")
+V2
+
+###########################################
+
+library(psych)
+p=dim(jeju)[2]
+Z=scale(jeju[,-c(1,23)], center=TRUE, scale=TRUE)
+pcfa<-principal(Z, nfactors=3, rotate="varimax")
+
+round(pcfa$values, 2)
+gof=pcfa$values/p*100; round(gof, 3)
+plot(pcfa$values, type="b", main="Scree Graph", 
+     xlab="Component Number", ylab="Eigenvalue")
+
+L=pcfa$loading[,1:3]; round(L, 3)
+round(diag(L%*%t(L)), 3) 
+Psi=pcfa$uniquenesses
+round(Psi,2)
+R=cor(credit_group)
+Rm = R-(L%*%t(L) + diag(Psi))
+round(Rm, 2)
+
+###################################
+
+Z=scale(jeju_clust, scale=TRUE, center=TRUE)
+pcfa<-principal(Z, nfactors=3, rotate="varimax") #4개의 인자
+fpc=pcfa$scores
+ds = dist(fpc, method="euclidean")
+ward = hclust(ds, method="ward.D2")
+plot(ward, hang=-1, labels=rownames(credit_group), cex=0.5)
+all<-NbClust(fpc, distance="euclidean", min.nc = 2, max.nc = 10,
+             method = "ward.D2", index = "all") #6개 뽑아라
+
+##비계층군집분석-kMEANS : 군집8개
+library(NbClust)
+jeju_clust = as.matrix(jeju_clust)
+Z= scale(jeju_clust, scale=TRUE, center=TRUE)
+all<-NbClust(Z, distance="euclidean", min.nc = 2, max.nc = 10,
+             method = "kmeans", index = "alllong")
+all[[1]]
+print(all)
+kmeans <- kmeans(Z,8) 
+cluster=data.frame(group=rownames(Z), cluster=kmeans$cluster)
+C1=cluster[(cluster[,2]==1),]
+C2=cluster[(cluster[,2]==2),]
+C3=cluster[(cluster[,2]==3),]
+C4=cluster[(cluster[,2]==4),]
+C5=cluster[(cluster[,2]==5),]
+C6=cluster[(cluster[,2]==6),]
+C7=cluster[(cluster[,2]==7),]
+C8=cluster[(cluster[,2]==8),]
+C1;C2;C3;C4;C5;C6;C7;C8
+
+        C1%>% head();C2%>% head();C3%>% head();C4%>% head()
+        C5%>% head();C6%>% head();C7%>% head();C8%>% head()
+aggregate(fpc, by=list(kmeans$cluster), FUN=mean)
+```
+```
+
+

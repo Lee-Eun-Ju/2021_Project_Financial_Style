@@ -1,0 +1,303 @@
+---
+title: "Age EDA"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+### Data import
+```{r}
+credit = read.csv("credit_card_data.csv", fileEncoding="UTF-8")
+jeju = read.csv("jeju_financial_life_data.csv")
+
+credit = credit[-1,] #첫번째 데이터 오류 존재
+str(credit)
+```
+
+### Credit EDA
+
+1. pop_cd : L시리즈 - 지역코드+나이대, Y시리즈 - 성별+나이대
+```{r}
+#L시리즈 - 성별 정보 없음.
+credit %>%
+  filter(str_sub(pop_cd,1,1) == "L" , sex=="") # 3455
+#Y시리즈 - 지역 정보 없음.
+credit %>%
+  filter(str_sub(pop_cd,1,1) == "Y" , city=="") #432
+
+#L시리즈, Y시리즈 분류
+area_credit = credit %>%
+  filter( str_sub(pop_cd,1,1) == "L" ) %>% 
+  dplyr::select( -sex)
+sex_credit = credit %>%
+  filter( str_sub(pop_cd,1,1) == "Y" ) %>% 
+  dplyr::select( -city)
+
+#연령대(ages), sex, city의 정보를 다른 변수가 대체하므로 pop_cd 제거
+is.na(area_credit$ages) %>% which
+is.na(sex_credit$ages) %>% which
+
+area_credit = area_credit[,-1]
+sex_credit = sex_credit[,-1]
+credit = credit[,-1] #연령대별로는 credit data를 본다.
+```
+
+
+#### 연령대별 credit
+2. avg_score(신용 점수), avg_rat(신용등급)
+```{r}
+unique(credit$avg_rat) #2등급, 3등급, 4등급 -> 정보의 손실이 심하다
+credit$avg_score %>% is.na %>% which #score NA도 없으므로 신용등급 삭제
+#credit = credit %>% dplyr::select(-"avg_rat")
+
+credit %>% 
+  ggplot(aes(x=ages, y=avg_score)) +
+  geom_boxplot(aes(color=ages))
+
+credit %>% 
+  count(ages, avg_rat) %>% 
+  ggplot(aes(x=ages, y=avg_rat)) +
+  geom_tile((aes(fill=n)))  +
+  scale_fill_gradient(low="grey",high="darkslategray")
+
+```
+
+대체로 30대가 되며 안정적인 직장에 자리 잡게 되며 신용점수가 높아진다.  
+또한 나이가 들며 더욱 높아지는 것을 알 수 있다.
+
+3. num_usecard(카드사용개수),num_opencard(카드개설개수) 
+```{r}
+credit %>% 
+  ggplot(aes(x=ages, y=num_opencard)) +
+  geom_boxplot(aes(color=ages))
+```
+30대에 가장 사회생활을 활발히 하는 나이대로 아직 안정적이지는 않으나  
+소비생활을 많이 하게되므로 30대에 가장 카드 개설을 많이 하나 이후 나이가 들며 점점 줄인다.
+
+```{r}
+credit %>% 
+  ggplot(aes(x=ages, y=num_usecard)) +
+  geom_boxplot(aes(color=ages))
+
+credit %>% 
+  ggplot(aes(x=num_opencard, y=num_usecard)) +
+  geom_smooth() + geom_point(alpha=0.3)
+```
+
+사용하는 카드 개수와 카드 개설수가 선형성이 매우 높으므로 하나의 변수로 finance style을 알 수 있다.
+대신 카드 사용률에 대한 변수를 생성한다.
+
+```{r}
+credit %>% 
+  mutate(card_using_rate = num_usecard/num_opencard) %>% 
+  ggplot(aes(x=ages, y=card_using_rate)) +
+  geom_boxplot(aes(color=ages))
+```
+
+10대들은 부모님께 의존하여 하나 정도의 카드를 개설하여 사용하므로 사용률이 높고  
+20대부터는 카드 사용률이 주로 50%정도 된다.  
+하지만 70대 이후부터는 카드가 있음에도 거의 사용하지 않는 것으로 보인다.  
+
+4. 월카드 소비액(monthly_card_spend)
+```{r}
+credit %>% 
+  mutate(ages_group = ifelse(ages=="30대"|ages=="30대"|ages=="30대", "3-50대", 
+                             ifelse(ages=="60대"|ages=="70대","6-70대", 
+                                    ifelse(ages=="80대"|ages=="90대","8-90대",
+                                           ifelse(ages=="10대", "10대","20대"))))) %>% 
+  ggplot(aes(x=ages_group, y=monthly_card_spend)) + 
+  geom_boxplot(aes(color=ages_group))
+
+```
+
+
+5. 대출금액과 각 대출종류에 대한 비율
+
+* monthly_lc: 대출약정금액으로 대출총액과의 차이는 아직 대출금을 받지 않은 경우
+-> 이변수는 주관적으로 보았을 때 의미가 없다고 생각
+
+monthly_sbk_loan - 저축은행 
+: 제2금융권으로 낮은 조건으로 대출을 받을 수 있으나 대출이자가 높다
+
+monthly_insurance_loan - 보험계약대출
+: 보험계약의 해지환급금 범위내에서 대출을 받을 수 있는 제도
+
+
+```{r}
+credit %>% 
+  group_by(ages) %>% 
+  summarise( monthly_loan = mean(monthly_loan),
+             monthly_bk_loan = mean(monthly_bk_loan),
+             monthly_cd_loan = mean(monthly_cd_loan),
+             monthly_installments_loan = mean(monthly_installments_loan),
+             monthly_insurance_loan = mean(monthly_insurance_loan),
+             monthly_sbk_loan = mean(monthly_sbk_loan)) %>% 
+   pivot_longer("monthly_loan":"monthly_sbk_loan", 
+               values_to = "value", names_to = "variable") %>% 
+  ggplot() +
+  geom_bar(aes(x=ages, y=value, fill=variable), position="dodge", stat="identity")
+```
+
+총 대출금액은 50대->40대->60대 순서대로 많다. 은행 대출도 마찬가지이다.
+다른 대출 비율도 알아보기 위해 두 변수를 제거한다.
+(10대의 경우 만19세이상 대출이 가능하므로 18,19살 때의 대출을 의미)
+
+대출종류에 따른 비율을 확인해보자.
+
+```{r}
+credit %>% 
+  group_by(ages) %>% 
+  summarise(monthly_bk_loan_rate = mean( monthly_bk_loan/monthly_loan ),
+         monthly_cd_loan_rate = mean( monthly_cd_loan/monthly_loan),
+         monthly_installments_loan_rate = mean( monthly_installments_loan/monthly_loan ),
+         monthly_insurance_loan_rate = mean( monthly_insurance_loan/monthly_loan),
+         monthly_sbk_loan_rate = mean( monthly_sbk_loan/monthly_loan)) %>% 
+  pivot_longer("monthly_bk_loan_rate":"monthly_sbk_loan_rate", 
+               values_to = "value", names_to = "variable") %>% 
+  ggplot() +
+  geom_bar(aes(x=ages, y=value, fill=variable), position="dodge", stat="identity")
+```
+
+어떤 나이대이든 은행 대출 비율이 가장 높으며 다른 대출종류에 대한 비교 불가하므로 이를 제거하고 비교
+
+```{r}
+credit %>% 
+  group_by(ages) %>% 
+  summarise(
+         monthly_cd_loan_rate = mean( monthly_cd_loan/monthly_loan),
+         monthly_installments_loan_rate = mean( monthly_installments_loan/monthly_loan ),
+         monthly_insurance_loan_rate = mean( monthly_insurance_loan/monthly_loan),
+         monthly_sbk_loan_rate = mean( monthly_sbk_loan/monthly_loan)) %>% 
+  pivot_longer("monthly_cd_loan_rate":"monthly_sbk_loan_rate", 
+               values_to = "value", names_to = "variable") %>% 
+  ggplot() +
+  geom_bar(aes(x=ages, y=value, fill=variable), position="dodge", stat="identity")
+
+```
+
+10대: 저축은행비율->할부대출비율, 20대: 할부대출비율->저축은행비율,
+30,40,50,60대: 할부대출비율->보험대출비율, 70대 이후는 보험대출비율이 가장 높다.
+-> 10대, 20대는 신용도가 매우 낮으므로 제2금융권에서 많이 대출한 것으로 보인다.
+
+
+6. 남은 잔액
+
+loan_commitment : 한도 대출 금액(마이너스 통장)
+inst_rep_loanb : 분할 상환 대출 금액
+ls_rep_loanb : 일시 상환 대출 금액
+credit_loan : 카드 대출 금액
+mortgage_loan : 담보 대출 금액
+
+```{r}
+credit %>% 
+  mutate(all_loanb = inst_rep_loanb + ls_rep_loanb) %>%  #남은 총 대출잔액
+  group_by(ages) %>% 
+  summarise(all_loanb_mean = mean(all_loanb),
+            loan_commitment_mean = mean(loan_commitment),
+            inst_rep_loanb_mean = mean(inst_rep_loanb), 
+            ls_rep_loanb_mean = mean(ls_rep_loanb),
+            credit_loan_mean = mean(credit_loan),
+            mortgage_loan_mean = mean(mortgage_loan)
+            ) %>% 
+  pivot_longer("loan_commitment_mean":"mortgage_loan_mean", 
+               values_to = "value", names_to = "variable") %>% 
+  ggplot() +
+  geom_bar(aes(x=ages, y=value, fill=variable), position="dodge", stat="identity")
+
+
+```
+
+주택담보대출은 주로 주택을 구매할 때 필요로 한 비용에 대해 주택을 담보로 대출하므로  
+주택을 구매하는 시점부터 대출을 많이 하기 시작
+
+나이가 들수록 분할상환해야하는 장기대출은 줄어들고 일시상환하는 단기대출을 이용한다.
+
+
+* credit_card_payment(신용카드 사용금액), credit_card_installments_payment(신용카드 할부 사용 금액)
+  데이터는 이상해보인다...
+  
+  
+
+## 카드사용개수-카드소비액-대출금액-신용점수
+
+* 각 나이대별로 카드 사용 개수에 따른 카드 소비액
+```{r}
+credit %>% 
+  ggplot(aes(x=num_usecard, y=monthly_card_spend)) +
+  geom_point(aes(colour=ages))
+```
+
+* 각 나이대별로 카드 사용 개수에 따른 총 대출금액
+```{r}
+credit %>% 
+  ggplot(aes(x=num_usecard, y=monthly_loan)) +
+  geom_point(aes(colour=ages))
+```
+
+* 각 나이대별로 카드소비액과 대출금액
+-> 대출금액이 많음에도 40대가 카드소비액 많음
+```{r}
+credit %>% 
+  ggplot(aes(x=monthly_loan, y=monthly_card_spend)) +
+  geom_point(aes(colour=ages))
+```
+
+* 각 나이대별로 신용점수에 따른 카드사용개수/카드소비액/대출금액
+```{r}
+p1 = credit %>% 
+  ggplot(aes(x=avg_score, y=num_usecard)) +
+  geom_point(aes(colour=ages))
+
+p2 = credit %>% 
+  ggplot(aes(x=avg_score, y=monthly_card_spend)) +
+  geom_point(aes(colour=ages))
+
+gridExtra::grid.arrange(p1,p2)
+
+credit %>% 
+  ggplot(aes(x=avg_score, y=monthly_loan)) +
+  geom_point(aes(colour=ages))
+```
+
+
+
+## 신용등급에 따라 어떤 대출하느냐
+```{r}
+credit %>% 
+  group_by(avg_rat) %>% 
+  summarise( monthly_loan = mean(monthly_loan),
+             monthly_bk_loan = mean(monthly_bk_loan),
+             monthly_cd_loan = mean(monthly_cd_loan),
+             monthly_installments_loan = mean(monthly_installments_loan),
+             monthly_insurance_loan = mean(monthly_insurance_loan),
+             monthly_sbk_loan = mean(monthly_sbk_loan)) %>% 
+   pivot_longer("monthly_loan":"monthly_sbk_loan", 
+               values_to = "value", names_to = "variable") %>% 
+  ggplot() + geom_bar(aes(x=factor(avg_rat), y=value, fill=variable), position="dodge", stat="identity")
+
+
+credit %>% 
+  group_by(avg_rat) %>% 
+  summarise( monthly_cd_loan = mean(monthly_cd_loan),
+             monthly_installments_loan = mean(monthly_installments_loan),
+             monthly_insurance_loan = mean(monthly_insurance_loan),
+             monthly_sbk_loan = mean(monthly_sbk_loan)) %>% 
+   pivot_longer("monthly_cd_loan":"monthly_sbk_loan", 
+               values_to = "value", names_to = "variable") %>% 
+  ggplot() + geom_bar(aes(x=factor(avg_rat), y=value, fill=variable), position="dodge", stat="identity")
+```
+
+
+
+
+
+
+
+
+
+
+
+

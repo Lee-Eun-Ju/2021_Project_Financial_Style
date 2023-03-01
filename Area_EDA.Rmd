@@ -1,0 +1,210 @@
+---
+title: "Area_EDA"
+author: "LEE EUN JU"
+date: '2021 5 19 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggmap)
+library(ggplot2)
+library(raster)
+library(rgeos)
+library(maptools)
+library(rgdal)
+library(lubridate)
+```
+
+# idea 생각나는 것-------------------------
+## 지역별 경제활동인구수에 따라 ~ 금융스타일
+
+### Data import
+```{r}
+credit = read.csv("credit_card_data.csv", fileEncoding="UTF-8")
+jeju = read.csv("jeju_financial_life_data.csv")
+
+credit = credit[-1,] #첫번째 데이터 오류 존재
+str(credit)
+
+area_credit = credit %>%
+  filter( str_sub(pop_cd,1,1) == "L" ) %>% 
+  dplyr::select( -sex)
+area_credit = area_credit[,-1]
+```
+
+
+### credit data에서 지도 나누기 위한 준비
+```{r}
+
+area_credit$ages = as.factor(area_credit$ages)
+area_credit$city = as.factor(area_credit$city)
+
+area_credit$id = rep(NA,nrow(area_credit))
+area_credit[which(area_credit$city=="서울"),"id"] = 8
+area_credit[which(area_credit$city=="부산"),"id"] = 7
+area_credit[which(area_credit$city=="대구"),"id"] = 5
+area_credit[which(area_credit$city=="인천"),"id"] = 11
+area_credit[which(area_credit$city=="광주"),"id"] = 4
+area_credit[which(area_credit$city=="대전"),"id"] = 6
+area_credit[which(area_credit$city=="울산"),"id"] = 10
+#area_credit[which(area_credit$city=="세종"),"id"]  
+area_credit[which(area_credit$city=="경기"),"id"] = 1
+area_credit[which(area_credit$city=="강원"),"id"] = 0
+area_credit[which(area_credit$city=="충북"),"id"] = 16
+area_credit[which(area_credit$city=="충남"),"id"] = 15
+area_credit[which(area_credit$city=="전북"),"id"] = 13
+area_credit[which(area_credit$city=="전남"),"id"] = 12
+area_credit[which(area_credit$city=="경북"),"id"] = 3
+area_credit[which(area_credit$city=="경남"),"id"] = 2
+area_credit[which(area_credit$city=="제주"),"id"] = 14
+unique(area_credit$id)
+
+area_credit$id = as.factor(area_credit$id)
+unique(area_credit$id)
+
+```
+
+### 날짜는 고려하지 말자
+```{r}
+area_credit = area_credit %>%
+  dplyr::select(-year,-month,-city) %>% 
+  group_by(id, ages) %>% 
+  summarise(avg_score = mean(avg_score),
+            avg_rat = mean(avg_rat),
+            population = mean(population),
+            num_opencard = mean(num_opencard),
+            num_usecard = mean(num_usecard),
+            monthly_card_spend = mean(monthly_card_spend),
+            monthly_lc = mean(monthly_lc),
+            monthly_loan = mean(monthly_loan),
+            monthly_bk_loan  = mean(monthly_bk_loan),
+            monthly_cd_loan = mean(monthly_cd_loan),
+            monthly_installments_loan = mean(monthly_installments_loan),
+            monthly_insurance_loan = mean(monthly_insurance_loan),
+            monthly_sbk_loan  = mean(monthly_sbk_loan),
+            loan_commitment = mean(loan_commitment),
+            inst_rep_loanb = mean(inst_rep_loanb),
+            ls_rep_loanb = mean(ls_rep_loanb),
+            credit_loan = mean(credit_loan),
+            mortgage_loan = mean(mortgage_loan),
+            credit_card_payment = mean(credit_card_payment),
+            credit_card_installments_payment = mean(credit_card_installments_payment),
+            id = id)
+
+area_credit = area_credit %>% 
+  distinct()
+write.csv(area_credit, "area_credit.csv")
+```
+
+
+### 지도 데이터 불러오기
+```{r}
+map = readOGR("C:\\Users\\eunju\\Desktop\\graduate school\\T09.00 SCM\\Final project\\map\\TL_SCCO_CTPRVN.shp")
+slotNames(map)
+df_map = fortify(map)
+head(df_map)
+
+# ggplot(data = df_map,
+#        aes(x = long, y = lat, 
+#            group = group, color = id)) + 
+#   geom_polygon(fill = "#FFFFFF") + 
+#   theme(legend.position = "none")
+
+korea = shapefile("C:\\Users\\eunju\\Desktop\\graduate school\\T09.00 SCM\\Final project\\map\\TL_SCCO_CTPRVN.shp")
+korea = spTransform(korea, CRS("+proj=longlat"))
+head(korea,23)
+korea_map = fortify(korea)
+head(korea_map)
+
+korea_map$id = as.factor(korea_map$id)
+unique(korea_map$id)
+```
+
+
+# Ex) 2016년 2월 10대
+```{r}
+area_credit = read.csv("area_credit.csv")
+
+#2016년 2월 10대
+area_credit = area_credit %>% 
+  group_by(id) %>%  
+  summarise(avg_score = mean(avg_score),
+            avg_rat = mean(avg_rat),
+            population = mean(population),
+            num_opencard = mean(num_opencard),
+            num_usecard = mean(num_usecard),
+            monthly_card_spend = mean(monthly_card_spend),
+            monthly_lc = mean(monthly_lc),
+            monthly_loan = mean(monthly_loan),
+            monthly_bk_loan  = mean(monthly_bk_loan),
+            monthly_cd_loan = mean(monthly_cd_loan),
+            monthly_installments_loan = mean(monthly_installments_loan),
+            monthly_insurance_loan = mean(monthly_insurance_loan),
+            monthly_sbk_loan  = mean(monthly_sbk_loan),
+            loan_commitment = mean(loan_commitment),
+            inst_rep_loanb = mean(inst_rep_loanb),
+            ls_rep_loanb = mean(ls_rep_loanb),
+            credit_loan = mean(credit_loan),
+            mortgage_loan = mean(mortgage_loan),
+            credit_card_payment = mean(credit_card_payment),
+            credit_card_installments_payment = mean(credit_card_installments_payment),
+            id = id)
+
+area_credit = unique(area_credit)
+area_credit$id = as.factor(area_credit$id)
+map_area_credit = korea_map %>% 
+  left_join(area_credit, by="id")
+
+map_area_credit %>% 
+  ggplot(aes(x=long, y=lat, group=group)) +
+  geom_polygon(aes(fill=num_opencard)) +
+  scale_fill_gradient(low="grey",high="darkslategray")+ 
+            ggtitle("사용 중인 카드 개수")
+
+map_area_credit %>% 
+  ggplot(aes(x=long, y=lat, group=group)) +
+  geom_polygon(aes(fill=avg_score)) +
+  scale_fill_gradient(low="grey",high="darkslategray")+ 
+            ggtitle("신용 점수")
+
+map_area_credit %>% 
+  ggplot(aes(x=long, y=lat, group=group)) +
+  geom_polygon(aes(fill=monthly_card_spend)) +
+  scale_fill_gradient(low="grey",high="darkslategray")+ 
+            ggtitle("월별 카드 소비액")
+
+map_area_credit %>% 
+  ggplot(aes(x=long, y=lat, group=group)) +
+  geom_polygon(aes(fill=monthly_loan)) +
+  scale_fill_gradient(low="grey",high="darkslategray")+ 
+            ggtitle("월별 대출금액")
+
+
+        
+```
+
+
+
+# Try
+```{r}
+
+korea_map %>% 
+  left_join(area_credit, by="id")  %>% 
+  filter(ages=="10대") %>% 
+  ggplot() +
+  geom_polygon(aes(x=long, y=lat, group=group, fill=num_usecard)) +
+  scale_fill_gradient(low="grey",high="darkslategray")
+
+```
+
+
+
+
+
+
+
+
+
+
